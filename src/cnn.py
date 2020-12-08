@@ -1,4 +1,3 @@
-import numpy as np
 import torch
 import torch.nn as nn
 from src.variables import *
@@ -8,6 +7,7 @@ import torchvision.datasets
 import os
 
 MINST_MEAN, MINST_STANDARD_DIV = 0.1307, 0.3081
+
 
 class CNN:
 
@@ -50,7 +50,7 @@ class CNN:
                     print('Epoch [{}/{}], Iteration [{}/{}], Loss: {:.5f}, Accuracy: {:.5f}%'
                           .format(epoch + 1, self.epochs, i + 1, total_step, loss.item(),
                                   (correct / total) * 100))
-    
+
     def testModel(self):
         print("Testing on 10000 images.")
         self.model.eval()
