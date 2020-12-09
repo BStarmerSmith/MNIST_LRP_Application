@@ -22,7 +22,7 @@ class CNN:
         self.train_loader = DataLoader(dataset=self.train_dataset, batch_size=self.batch_size, shuffle=True)
         self.test_loader = DataLoader(dataset=self.test_dataset, batch_size=self.batch_size, shuffle=False)
 
-    def trainModel(self):
+    def train_model(self):
         print("Training Model")
         criterion = nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
@@ -51,7 +51,7 @@ class CNN:
                           .format(epoch + 1, self.epochs, i + 1, total_step, loss.item(),
                                   (correct / total) * 100))
 
-    def testModel(self):
+    def test_model(self):
         print("Testing on 10000 images.")
         self.model.eval()
         with torch.no_grad():
@@ -66,7 +66,7 @@ class CNN:
             print('Accuracy of the model was: {}%'.format((correct / total) * 100))
 
     # This function is used to save the model
-    def saveModel(self):
+    def save_model(self):
         model_dir = os.path.join(MODEL_DIRECTORY, MODEL_FILENAME)
         torch.save(self.model, model_dir)
 

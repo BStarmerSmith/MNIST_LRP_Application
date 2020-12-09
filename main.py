@@ -6,20 +6,18 @@ from src.cnn import CNN
 from PIL import Image
 
 
-def trainNetwork():
+def train_network():
     model = CNN()
-    model.trainModel()
-    model.testModel()
-    model.saveModel()
+    model.train_model()
+    model.test_model()
+    model.save_model()
 
 
-def testAllImages(path='data\\MyImages'):
+def test_all_images(path='data\\MyImages'):
     images = [os.path.join(path, f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
     for img_dir in images:
         image = Image.open(img_dir)
-        image = loader.formatImage(image)
-        image = loader.resizeAndCenter(image)
-        print(loader.predictImage(image))
+        print(loader.process_image(image))
 
 
 if __name__ == "__main__":
@@ -30,6 +28,7 @@ if __name__ == "__main__":
     if not len(sys.argv) > 1:
         print("Please use the flags -tr for training or -te for testing.")
     if args.Train:
-        trainNetwork()
+        train_network()
     if args.Test:
-        testAllImages()
+        test_all_images()
+
