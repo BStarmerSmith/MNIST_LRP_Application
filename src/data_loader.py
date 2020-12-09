@@ -44,6 +44,7 @@ def resize_and_center(sample, new_size=28):
 def predict_image(image):
     image_tensor = transforms(image).float()
     image_tensor = image_tensor.unsqueeze_(0)
+    show_image_tensor(image_tensor.numpy()[0])
     cnn_input = Variable(image_tensor)
     cnn_input = cnn_input.to(device)
     model = torch.load(os.path.join(MODEL_DIRECTORY, MODEL_FILENAME))
@@ -54,10 +55,19 @@ def predict_image(image):
     return predicted.sum().item()
 
 
+# This function is used to show an image of whatever tensor is presented.
+def show_image_tensor(tensor, figsize=(8, 4), title=None):
+    tensor = tensor.reshape(28, 28)
+    plt.figure(figsize=figsize)
+    plt.matshow(tensor, cmap='gray')
+    if title: plt.title(title)
+    plt.show()
+
+
 # This function takes in an image, a figure size and a title and presents the image on a chart.
 def show_image(image, figsize=(8, 4), title=None):
     plt.figure(figsize=figsize)
-    plt.imshow(image)
+    plt.imshow(image, cmap='gray')
     if title: plt.title(title)
     plt.show()
 
