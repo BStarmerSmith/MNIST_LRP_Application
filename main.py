@@ -25,7 +25,7 @@ def process_image():
     path = 'data\\MyImages'
     images = [os.path.join(path, f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
     image = Image.open(random.choice(images))
-    print(loader.process_image(image))
+    loader.process_image(image)
 
 
 if __name__ == "__main__":

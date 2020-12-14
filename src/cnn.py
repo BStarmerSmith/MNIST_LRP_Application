@@ -46,7 +46,7 @@ class CNN:
                 correct = (predicted == labels).sum().item()
                 acc_list.append(correct / total)
 
-                if (i + 1) % 100 == 0: # Print status every 100 images
+                if (i + 1) % 100 == 0:  # Print status every 100 images
                     print('Epoch [{}/{}], Iteration [{}/{}], Loss: {:.5f}, Accuracy: {:.5f}%'
                           .format(epoch + 1, self.epochs, i + 1, total_step, loss.item(),
                                   (correct / total) * 100))

@@ -1,13 +1,14 @@
 import matplotlib.pyplot as plt
 import torch
 import os
+import numpy as np
 from src.variables import *
-from PIL import ImageEnhance, ImageOps
+from PIL import ImageEnhance, ImageOps, Image
 from torch.autograd import Variable
 from torchvision import transforms
 
 MINST_MEAN, MINST_STANDARD_DIV = 0.1307, 0.3081
-transforms = transforms.Compose([transforms.ToTensor(), transforms.Normalize((MINST_MEAN,), (MINST_STANDARD_DIV,))])
+transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((MINST_MEAN,), (MINST_STANDARD_DIV,))])
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
@@ -16,7 +17,8 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 def process_image(raw_image, new_size=28):
     image = format_image(raw_image)
     image = resize_and_center(image, new_size)
-    return predict_image(image)
+    #predicted_img = predict_image(image)
+    preform_lrp(image)
 
 
 # This function takes in an PIL Image and converts it to a grayscale image to match MNIST format
@@ -42,9 +44,8 @@ def resize_and_center(sample, new_size=28):
 # This function takes in an PIL Image, converts it into a tensor then uses the trained cnn to get
 # predict the digit in the image.
 def predict_image(image):
-    image_tensor = transforms(image).float()
+    image_tensor = transform(image).float()
     image_tensor = image_tensor.unsqueeze_(0)
-    show_image_tensor(image_tensor.numpy()[0])
     cnn_input = Variable(image_tensor)
     cnn_input = cnn_input.to(device)
     model = torch.load(os.path.join(MODEL_DIRECTORY, MODEL_FILENAME))
@@ -53,6 +54,31 @@ def predict_image(image):
     output = output.to(device)  # Does the same
     _, predicted = torch.max(output.data, 1)
     return predicted.sum().item()
+
+
+def preform_lrp(image):
+    image_tensor = transform(image).float()
+    image_tensor = image_tensor.unsqueeze_(0)
+    model = torch.load(os.path.join(MODEL_DIRECTORY, MODEL_FILENAME))
+    image_tensor = Variable(image_tensor)
+
+    output = model(image_tensor)
+    weight = load_weights(model)[0]
+    bias = load_bias(model)[0]
+    length = len(weight)
+
+
+def load_weights(model):
+    fc2weight = model.fc2.weight.data
+    print(fc2weight)
+    fc1weight = model.fc1.weight.data.detach().numpy()
+    return [fc2weight, fc1weight]
+
+
+def load_bias(model):
+    fc2bias = model.fc2.bias.data.detach().numpy()
+    fc1bias = model.fc1.bias.data.detach().numpy()
+    return [fc2bias, fc1bias]
 
 
 # This function is used to show an image of whatever tensor is presented.
