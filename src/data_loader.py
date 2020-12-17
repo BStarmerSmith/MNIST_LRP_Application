@@ -57,28 +57,29 @@ def predict_image(image):
 
 
 def preform_lrp(image):
+    model = torch.load(os.path.join(MODEL_DIRECTORY, MODEL_FILENAME))
     image_tensor = transform(image).float()
     image_tensor = image_tensor.unsqueeze_(0)
-    model = torch.load(os.path.join(MODEL_DIRECTORY, MODEL_FILENAME))
-    image_tensor = Variable(image_tensor)
-
-    output = model(image_tensor)
-    weight = load_weights(model)[0]
-    bias = load_bias(model)[0]
-    length = len(weight)
-
-
-def load_weights(model):
-    fc2weight = model.fc2.weight.data
-    print(fc2weight)
-    fc1weight = model.fc1.weight.data.detach().numpy()
-    return [fc2weight, fc1weight]
+    show_image_tensor(image_tensor)
+    length = 5
+    A = process_data(model=model, image_tensor=image_tensor)
+    for i in A:
+        values, indicies = torch.max(i, 1)
+        output = indicies.sum().item()
+        print("Values   = ", values)
+        print("Indicies = ", indicies)
+        print("Output   = ", output)
 
 
-def load_bias(model):
-    fc2bias = model.fc2.bias.data.detach().numpy()
-    fc1bias = model.fc1.bias.data.detach().numpy()
-    return [fc2bias, fc1bias]
+# This function takes the input and works out the output at each level.
+def process_data(model, image_tensor):
+    layer1 = model.layer1(image_tensor).data
+    layer2 = model.layer2(layer1).data
+    dropout = layer2.reshape(layer2.size(0), -1)
+    dropout = model.drop_out(dropout).data
+    fc1 = model.fc1(dropout).data
+    fc2 = model.fc2(fc1).data
+    return [layer1, layer2, dropout, fc1, fc2]
 
 
 # This function is used to show an image of whatever tensor is presented.
