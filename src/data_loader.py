@@ -63,23 +63,36 @@ def preform_lrp(image):
     show_image_tensor(image_tensor)
     length = 5
     A = process_data(model=model, image_tensor=image_tensor)
-    for i in A:
-        values, indicies = torch.max(i, 1)
-        output = indicies.sum().item()
-        print("Values   = ", values)
-        print("Indicies = ", indicies)
-        print("Output   = ", output)
 
 
 # This function takes the input and works out the output at each level.
 def process_data(model, image_tensor):
     layer1 = model.layer1(image_tensor).data
     layer2 = model.layer2(layer1).data
+    get_heatmap(data=layer1, layer="layer1")
+    get_heatmap(data=layer2, layer="layer2")
     dropout = layer2.reshape(layer2.size(0), -1)
     dropout = model.drop_out(dropout).data
     fc1 = model.fc1(dropout).data
     fc2 = model.fc2(fc1).data
-    return [layer1, layer2, dropout, fc1, fc2]
+    return {"layer1":layer1, "layer2:":layer2,
+            "dropout":dropout, "fc1":fc1, "fc2":fc2}
+
+
+def get_heatmap(layer, data):
+    print("-"*100)
+    image_details, _ = torch.max(data, 1)
+    print(image_details, _)
+    image_details = image_details[0]
+    print(image_details)
+    show_tensor(image_details, title=layer)
+
+
+def show_tensor(tensor, figsize=(8, 4), title=None):
+    plt.figure(figsize=figsize)
+    plt.matshow(tensor)
+    if title: plt.title(title)
+    plt.show()
 
 
 # This function is used to show an image of whatever tensor is presented.
