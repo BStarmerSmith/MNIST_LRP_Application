@@ -4,6 +4,7 @@ import os
 import numpy as np
 from src.variables import *
 from PIL import ImageEnhance, ImageOps, Image
+import copy
 from torch.autograd import Variable
 from torchvision import transforms
 
@@ -49,6 +50,7 @@ def predict_image(image):
     cnn_input = Variable(image_tensor)
     cnn_input = cnn_input.to(device)
     model = torch.load(os.path.join(MODEL_DIRECTORY, MODEL_FILENAME))
+    model.eval()
     model.to(device)  # Ensures model is on either CPU or GPU
     output = model(cnn_input)
     output = output.to(device)  # Does the same
@@ -58,28 +60,65 @@ def predict_image(image):
 
 def preform_lrp(image):
     model = torch.load(os.path.join(MODEL_DIRECTORY, MODEL_FILENAME))
+    model.to(device)
+    model.eval()
     image_tensor = transform(image).float()
     image_tensor = image_tensor.unsqueeze_(0)
     show_image_tensor(image_tensor)
-    length = 5
-    A = process_data(model=model, image_tensor=image_tensor)
+    print(e_lrp(model, image_tensor))
 
 
-# This function takes the input and works out the output at each level.
-def process_data(model, image_tensor):
-    layer1 = model.layer1(image_tensor).data
-    layer2 = model.layer2(layer1).data
-    get_heatmap(data=layer1, layer="layer1")
-    get_heatmap(data=layer2, layer="layer2")
-    dropout = layer2.reshape(layer2.size(0), -1)
-    dropout = model.drop_out(dropout).data
-    fc1 = model.fc1(dropout).data
-    fc2 = model.fc2(fc1).data
-    return {"layer1":layer1, "layer2:":layer2,
-            "dropout":dropout, "fc1":fc1, "fc2":fc2}
+def e_lrp(model, img_tensor):
+    layers = [module for module in model.modules() if not isinstance(module, torch.nn.Sequential)
+              and not isinstance(module, torch.nn.Dropout)][1:]  # Gets all layers except sequential and dropout
+    L = len(layers)
+    A = [img_tensor] + [img_tensor] * L  # Makes the list
+    for layer in range(L):
+        if layer == 6:  # This is where we need to reshape the tensor
+            print(A[layer].shape)
+            A[layer] = A[layer].reshape(A[layer].size(0), -1)
+            print(A[layer].shape)
+        A[layer + 1] = layers[layer].forward(A[layer].to(device))
 
+    T = A[-1].cpu().detach().numpy().tolist()[0]
+    index = T.index(max(T))  # The index of the highest classification
+    T = torch.FloatTensor(np.abs(np.array(T)) * 0)  # Sets all values to 0 - as a tensor
+    T[index] = 1  # Sets the index of the highest classification to 1, as its all we care for
 
-def get_heatmap(layer, data):
+    R = [None] * L + [(A[-1].cpu() * T).data + 1e-6]
+    for layer in range(0, L)[::-1]:
+        if isinstance(layers[layer], torch.nn.Conv2d) or isinstance(layers[layer], torch.nn.Linear):
+            # Specifies the rho function that will be applied to the weights of the layer
+            if 0 < layer <= 5:  # Gamma rule (LRP-gamma)
+                rho = lambda p: p + 0.25 * p.clamp(min=0)
+            else:  # Basic rule (LRP-0)
+                rho = lambda p: p
+            print(layer)
+            A[layer] = A[layer].data.requires_grad_(True)
+            # Step 1: Transform the weights of the layer and executes a forward pass
+            z = newlayer(layers[layer], rho).forward(A[layer]) + 1e-9
+            # Step 2: Element-wise division between the relevance of the next layer and the denominator
+            s = (R[layer + 1].to(device) / z).data
+            # Step 3: Calculate the gradient and multiply it by the activation layer
+            (z * s).sum().backward()
+            c = A[layer].grad
+            R[layer] = (A[layer] * c).cpu().data
+            if layer == 6:  # Reshape after layer fc1
+                R[layer] = torch.reshape(R[layer], (1, 64, 7, 7))
+                print(R[layer].shape)
+        else:
+            R[layer] = R[layer + 1]
+
+    # Return the relevance of the input layer
+    return R[0]
+
+def newlayer(layer, rho):
+    layer = copy.deepcopy(layer)
+    layer.weight = torch.nn.Parameter(rho(layer.weight))
+    layer.bias = torch.nn.Parameter(rho(layer.bias))
+    return layer
+
+def get_heatmap(data, layer=""):
     print("-"*100)
     image_details, _ = torch.max(data, 1)
     print(image_details, _)
