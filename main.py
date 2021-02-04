@@ -2,6 +2,7 @@ import src.data_loader as loader
 import os
 import argparse
 import sys
+import random
 from src.cnn import CNN
 from PIL import Image
 
@@ -20,6 +21,13 @@ def test_all_images(path='data\\MyImages'):
         print(loader.process_image(image))
 
 
+def process_image():
+    path = 'data\\MyImages'
+    images = [os.path.join(path, f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
+    image = Image.open(random.choice(images))
+    loader.process_image(image)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-tr", "--Train", help="Train the Network", action='store_true')
@@ -30,5 +38,6 @@ if __name__ == "__main__":
     if args.Train:
         train_network()
     if args.Test:
-        test_all_images()
+        #test_all_images()
+        process_image()
 
