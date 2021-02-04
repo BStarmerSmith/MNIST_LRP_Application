@@ -18,8 +18,6 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 def process_image(raw_image, new_size=28):
     image = format_image(raw_image)
     image = resize_and_center(image, new_size)
-    predicted_img = predict_image(image)
-    #return predicted_img
     preform_lrp(image)
 
 
@@ -58,7 +56,9 @@ def predict_image(image):
     _, predicted = torch.max(output.data, 1)
     return predicted.sum().item()
 
-
+# This function takes in a PIL image, converts it to a tensor and predicts what the image
+# will be, it then passes the model and img_tensor to the LRP function which returns the
+# relevancy of the input at all layers, and presents them.
 def preform_lrp(image):
     model = torch.load(os.path.join(MODEL_DIRECTORY, MODEL_FILENAME))
     model.to(device)
@@ -66,19 +66,28 @@ def preform_lrp(image):
     image_tensor = transform(image).float()
     image_tensor = image_tensor.unsqueeze_(0)
     image_tensor.to(device)
+    predicted_value = "Predicted value " + str(predict_image(image))
+    R = e_lrp(model, image_tensor)
+    print(predicted_value)
     show_image_tensor(image_tensor)
-    print(e_lrp(model, image_tensor))
+    for index in [6,5,3,2,0]:
+        heatmap(np.array(R[index][0].cpu()).sum(axis=0), 3.5, 3.5)
 
-
+# This function takes in the model of the Network and an image_tensor. This is what
+# The LRP algorithm is applied to, it converts all layers to Conv2D then preforms all
+# forward passes so we can get the relevancy of the network at all layers.
+# This function returns the relevance [R] of all layers within the network (except dropout).
 def e_lrp(model, img_tensor):
+    # Gets all the layers
     layers = list(model._modules['layer1']) + list(model._modules['layer2']) \
              + toconv([model._modules['fc1'], model._modules['fc2']])
 
     L = len(layers)
     A = [img_tensor]+[None]*L
-    for l in range(L):
+    for l in range(L): # Preforms the forward pass for each layer
         A[l+1] = layers[l].forward(A[l].to(device))
 
+    # Used to get the predicted output of the network
     T = A[-1].cpu().detach().numpy().tolist()[0]
     index = T.index(max(T))
     T = np.abs(np.array(T)) * 0
@@ -86,38 +95,48 @@ def e_lrp(model, img_tensor):
     T = torch.FloatTensor(T)
 
     R = [None] * L + [(A[-1].cpu() * T).data + 1e-6]
-
     for l in range(1,L)[::-1]:
         A[l] = (A[l].data).requires_grad_(True)
+        # LRP paper says to turn MaxPool layers to AvgPoollayers
         if isinstance(layers[l],torch.nn.MaxPool2d): layers[l] = torch.nn.AvgPool2d(2)
+        # We only preform LRP on Conv and AvgPool layers
         if isinstance(layers[l],torch.nn.Conv2d) or isinstance(layers[l],torch.nn.AvgPool2d):
-
-            if l <= 2:       rho = lambda p: p + 0.25*p.clamp(min=0); incr = lambda z: z+1e-9
-            if 3 <= l <= 5: rho = lambda p: p;                       incr = lambda z: z+1e-9+0.25*((z**2).mean()**.5).data
-            if l >= 6:       rho = lambda p: p;                       incr = lambda z: z+1e-9
+            if l <= 2:
+                rho = lambda p: p + 0.25*p.clamp(min=0)
+                incr = lambda z: z+1e-9
+            if 3 <= l <= 5:
+                rho = lambda p: p
+                incr = lambda z: z+1e-9+0.25*((z**2).mean()**.5).data
+            if l >= 6:
+                rho = lambda p: p
+                incr = lambda z: z+1e-9
 
             z = incr(newlayer(layers[l],rho).forward(A[l]))  # step 1
-            s = (R[l+1].to(device)/z).data                                    # step 2
-            (z*s).sum().backward(); c = A[l].grad                  # step 3
-            R[l] = (A[l]*c).data                                   # step 4
+            s = (R[l+1].to(device)/z).data                   # step 2
+            (z*s).sum().backward(); c = A[l].grad            # step 3
+            R[l] = (A[l]*c).data                             # step 4
         else:
             R[l] = R[l+1]
 
-    mean, std = 0.1307, 0.3081
-
+    # Here is where we get the relevancy at layer 0
+    mean, std = 0.1307, 0.3081  # mean and std of MNIST
     A[0] = (A[0].data).requires_grad_(True)
     lb = (A[0].data*0+(0-mean)/std).requires_grad_(True)
     hb = (A[0].data*0+(1-mean)/std).requires_grad_(True)
 
-    z = layers[0].forward(A[0].to(device)) + 1e-9                                     # step 1 (a)
-    z -= newlayer(layers[0],lambda p: p.clamp(min=0)).forward(lb.to(device))    # step 1 (b)
-    z -= newlayer(layers[0],lambda p: p.clamp(max=0)).forward(hb.to(device))    # step 1 (c)
-    s = (R[1]/z).data                                                      # step 2
-    (z*s).sum().backward(); c,cp,cm = A[0].grad,lb.grad,hb.grad            # step 3
-    R[0] = (A[0]*c+lb*cp+hb*cm).data
-    heatmap(np.array(R[0][0]).sum(axis=0),3.5,3.5)
+    z = layers[0].forward(A[0].to(device)) + 1e-9                               # step 1 (a)
+    z -= newlayer(layers[0], lambda p: p.clamp(min=0)).forward(lb.to(device))   # step 1 (b)
+    z -= newlayer(layers[0], lambda p: p.clamp(max=0)).forward(hb.to(device))   # step 1 (c)
+    s = (R[1] / z).data                                                         # step 2
+    (z*s).sum().backward()                                                      # step 3
+    c, cp, cm = A[0].grad, lb.grad, hb.grad
+    R[0] = (A[0] * c + lb * cp + hb * cm).data
+    return R
 
 
+# This function takes a list of Linear layers and converts them to Conv2D layers.
+# The layer at index 0 needs to be specifically formatted to deal with the adjustment
+# of a 2d network to a 1d network.
 def toconv(layers):
     newlayers = []
     for i,layer in enumerate(layers):
@@ -137,6 +156,7 @@ def toconv(layers):
             newlayers += [layer]
     return newlayers
 
+
 def newlayer(layer, g):
     layer = copy.deepcopy(layer)
     try:
@@ -148,15 +168,6 @@ def newlayer(layer, g):
     except AttributeError:
         pass
     return layer
-
-
-def get_heatmap(data, layer=""):
-    print("-"*100)
-    image_details, _ = torch.max(data, 1)
-    print(image_details, _)
-    image_details = image_details[0]
-    print(image_details)
-    show_tensor(image_details, title=layer)
 
 
 def show_tensor(tensor, figsize=(8, 4), title=None):
@@ -182,7 +193,8 @@ def show_image(image, figsize=(8, 4), title=None):
     if title: plt.title(title)
     plt.show()
 
-def heatmap(R,sx,sy):
+
+def heatmap(R, sx, sy):
     b = 10*((np.abs(R)**3.0).mean()**(1.0/3))
     from matplotlib.colors import ListedColormap
     my_cmap = plt.cm.seismic(np.arange(plt.cm.seismic.N))
@@ -190,6 +202,5 @@ def heatmap(R,sx,sy):
     my_cmap = ListedColormap(my_cmap)
     plt.figure(figsize=(sx,sy))
     plt.subplots_adjust(left=0,right=1,bottom=0,top=1)
-    plt.axis('off')
     plt.imshow(R,cmap=my_cmap,vmin=-b,vmax=b,interpolation='nearest')
     plt.show()
