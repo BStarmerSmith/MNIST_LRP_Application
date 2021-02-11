@@ -67,12 +67,10 @@ def preform_lrp(image):
     image_tensor = transform(image).float()
     image_tensor = image_tensor.unsqueeze_(0)
     image_tensor.to(device)
-    predicted_value = "Predicted value " + str(predict_image(image))
     R = e_lrp(model, image_tensor)
-    print(predicted_value)
     relevance = process_array([("Linear Layer", R[6][0]), ("MaxPool-2", R[5][0]), ("Conv2d-2", R[3][0]),
                                ("MaxPool-1", R[2][0]), ("Conv2d-1", R[0][0])])
-    plot_images(image_tensor, relevance)
+    plot_images(image_tensor, relevance, str(predict_image(image)))
 
 
 def process_array(arr):
@@ -203,7 +201,7 @@ def show_image(image, figsize=(8, 4), title=None):
     plt.show()
 
 
-def plot_images(init_img, R):
+def plot_images(init_img, R, predicted_val):
     fig = plt.figure(figsize=(10, 10))
     columns = 3
     rows = 2
@@ -220,5 +218,7 @@ def plot_images(init_img, R):
         plt.axis('off')
         plt.imshow(r, cmap=my_cmap, vmin=-b, vmax=b, interpolation='nearest')
         i = i + 1
+    plt.figtext(0.5, 0.1, "Predicted value of Network is {}".format(predicted_val), ha="center", fontsize=18,
+                bbox={"facecolor":"purple", "alpha":0.5, "pad":5})
 
     plt.show()
