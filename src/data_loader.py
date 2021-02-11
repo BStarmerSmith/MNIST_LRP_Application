@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
 import torch
 import os
 import numpy as np
@@ -69,9 +70,17 @@ def preform_lrp(image):
     predicted_value = "Predicted value " + str(predict_image(image))
     R = e_lrp(model, image_tensor)
     print(predicted_value)
-    show_image_tensor(image_tensor)
-    for index in [6,5,3,2,0]:
-        heatmap(np.array(R[index][0].cpu()).sum(axis=0), 3.5, 3.5)
+    relevance = process_array([("Linear Layer", R[6][0]), ("MaxPool-2", R[5][0]), ("Conv2d-2", R[3][0]),
+                               ("MaxPool-1", R[2][0]), ("Conv2d-1", R[0][0])])
+    plot_images(image_tensor, relevance)
+
+
+def process_array(arr):
+    output = []
+    for lable, element in arr:
+        output.append((lable, np.array(element.cpu()).sum(axis=0)))
+    return output
+
 
 # This function takes in the model of the Network and an image_tensor. This is what
 # The LRP algorithm is applied to, it converts all layers to Conv2D then preforms all
@@ -194,13 +203,22 @@ def show_image(image, figsize=(8, 4), title=None):
     plt.show()
 
 
-def heatmap(R, sx, sy):
-    b = 10*((np.abs(R)**3.0).mean()**(1.0/3))
-    from matplotlib.colors import ListedColormap
-    my_cmap = plt.cm.seismic(np.arange(plt.cm.seismic.N))
-    my_cmap[:,0:3] *= 0.85
-    my_cmap = ListedColormap(my_cmap)
-    plt.figure(figsize=(sx,sy))
-    plt.subplots_adjust(left=0,right=1,bottom=0,top=1)
-    plt.imshow(R,cmap=my_cmap,vmin=-b,vmax=b,interpolation='nearest')
+def plot_images(init_img, R):
+    fig = plt.figure(figsize=(10, 10))
+    columns = 3
+    rows = 2
+    i = 2 # As we are adding the input image first.
+    fig.add_subplot(rows, columns, 1).set_title("Input Image")
+    plt.axis('off')
+    plt.imshow(init_img.reshape(28, 28), cmap='gray')
+    for label, r in R:
+        b = 10 * ((np.abs(r) ** 3.0).mean() ** (1.0/3))
+        my_cmap = plt.cm.seismic(np.arange(plt.cm.seismic.N))
+        my_cmap[:, 0:3] *= 0.85
+        my_cmap = ListedColormap(my_cmap)
+        fig.add_subplot(rows, columns, i).set_title(label)
+        plt.axis('off')
+        plt.imshow(r, cmap=my_cmap, vmin=-b, vmax=b, interpolation='nearest')
+        i = i + 1
+
     plt.show()

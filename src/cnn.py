@@ -75,16 +75,16 @@ class ConvNet(nn.Module):
     def __init__(self):
         super(ConvNet, self).__init__()
         self.layer1 = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=5, stride=1, padding=2),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2))
+            nn.Conv2d(1, 32, kernel_size=5, stride=1, padding=2), #0
+            nn.ReLU(),                                            #1
+            nn.MaxPool2d(kernel_size=2, stride=2))                #2
         self.layer2 = nn.Sequential(
-            nn.Conv2d(32, 64, kernel_size=5, stride=1, padding=2),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2))
+            nn.Conv2d(32, 64, kernel_size=5, stride=1, padding=2),#3
+            nn.ReLU(),                                            #4
+            nn.MaxPool2d(kernel_size=2, stride=2))                #5
         self.drop_out = nn.Dropout()
-        self.fc1 = nn.Linear(7 * 7 * 64, 1000)
-        self.fc2 = nn.Linear(1000, 10)
+        self.fc1 = nn.Linear(7 * 7 * 64, 1000)                    #6
+        self.fc2 = nn.Linear(1000, 10)                            #7
 
     def forward(self, data):
         out = self.layer1(data)
