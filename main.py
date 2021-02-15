@@ -41,6 +41,8 @@ if __name__ == "__main__":
     parser.add_argument("-tr", "--Train", help="Train the Network", action='store_true')
     parser.add_argument("-te", "--Test", help="Test the Network", action='store_true')
     args = parser.parse_args()
+    if not os.path.exists(output_path):
+        os.mkdir(output_path)
     if not len(sys.argv) > 1:
         print("Please use the flags -tr for training or -te for testing.")
     if args.Train:
