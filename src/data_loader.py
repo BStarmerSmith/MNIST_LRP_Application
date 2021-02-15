@@ -54,8 +54,13 @@ def predict_image(image):
     model.to(device)  # Ensures model is on either CPU or GPU
     output = model(cnn_input)
     output = output.to(device)  # Does the same
-    _, predicted = torch.max(output.data, 1)
-    return predicted.sum().item()
+    _, expectedVal = torch.max(output.data, 1)
+    prediction = torch.topk(torch.nn.functional.softmax(output.data), 5)
+    percent, index, percentage = prediction[0].cpu().detach().numpy(), prediction[1].cpu().detach().numpy(), []
+    for i in range(0,5):
+        percentage.append((index[0][i], percent[0][i]))
+    return expectedVal.sum().item(), percentage
+
 
 # This function takes in a PIL image, converts it to a tensor and predicts what the image
 # will be, it then passes the model and img_tensor to the LRP function which returns the
@@ -68,16 +73,31 @@ def preform_lrp(image):
     image_tensor = image_tensor.unsqueeze_(0)
     image_tensor.to(device)
     R = e_lrp(model, image_tensor)
-    relevance = process_array([("Linear Layer", R[6][0]), ("MaxPool-2", R[5][0]), ("Conv2d-2", R[3][0]),
+    relevance = process_array([("Linear Layer-1", R[6][0]), ("MaxPool-2", R[5][0]), ("Conv2d-2", R[3][0]),
                                ("MaxPool-1", R[2][0]), ("Conv2d-1", R[0][0])])
-    plot_images(image_tensor, relevance, str(predict_image(image)))
+    predicted_val, percentage = predict_image(image)
+    percentagestr = process_percentage(percentage)
+    plot_images(image_tensor, relevance, predicted_val, percentagestr)
 
 
+# This function processes the data of the relevancy so its in the correct form
+# to be presented.
 def process_array(arr):
     output = []
     for lable, element in arr:
         output.append((lable, np.array(element.cpu()).sum(axis=0)))
     return output
+
+
+# This function takes the 5 most likely outputs and presents them as a string for display.
+def process_percentage(tuple):
+    out_str = ""
+    for index, percentage in tuple:
+        if percentage == 1.0:
+            out_str += "{}: 100% ".format(index)
+        else:
+            out_str += "{}: {:.5%} ".format(index, percentage)
+    return out_str
 
 
 # This function takes in the model of the Network and an image_tensor. This is what
@@ -201,11 +221,13 @@ def show_image(image, figsize=(8, 4), title=None):
     plt.show()
 
 
-def plot_images(init_img, R, predicted_val):
+# This function is used to display LRP and the input image with the predicted values
+# and the likely-hood the model thinks its correct.
+def plot_images(init_img, R, predicted_val, outstring):
     fig = plt.figure(figsize=(10, 10))
     columns = 3
     rows = 2
-    i = 2 # As we are adding the input image first.
+    i = 2  # As we are adding the input image first.
     fig.add_subplot(rows, columns, 1).set_title("Input Image")
     plt.axis('off')
     plt.imshow(init_img.reshape(28, 28), cmap='gray')
@@ -218,7 +240,7 @@ def plot_images(init_img, R, predicted_val):
         plt.axis('off')
         plt.imshow(r, cmap=my_cmap, vmin=-b, vmax=b, interpolation='nearest')
         i = i + 1
-    plt.figtext(0.5, 0.1, "Predicted value of Network is {}".format(predicted_val), ha="center", fontsize=18,
+    plt.tight_layout()
+    plt.figtext(0.5, 0.04, "Predicted value of Network is {} \n {}".format(predicted_val, outstring), ha="center", fontsize=18,
                 bbox={"facecolor":"purple", "alpha":0.5, "pad":5})
-
     plt.show()

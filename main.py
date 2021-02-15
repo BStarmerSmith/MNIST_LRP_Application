@@ -14,6 +14,8 @@ def train_network():
     model.save_model()
 
 
+# This function is used to test all the images in a specifc folder. Its by default set to the path of
+# Images I provided for testing.
 def test_all_images(path='data\\MyImages'):
     images = [os.path.join(path, f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
     for img_dir in images:
@@ -21,6 +23,7 @@ def test_all_images(path='data\\MyImages'):
         print(loader.process_image(image))
 
 
+# This function is used to test one random image I created.
 def process_image():
     path = 'data\\MyImages'
     images = [os.path.join(path, f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
@@ -38,6 +41,5 @@ if __name__ == "__main__":
     if args.Train:
         train_network()
     if args.Test:
-        #test_all_images()
         process_image()
 
