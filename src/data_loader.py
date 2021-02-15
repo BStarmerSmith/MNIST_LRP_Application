@@ -16,10 +16,10 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # This function takes in an PIL Image and formats it to minsk format, then returns the image
 # which has been processed.
-def process_image(raw_image, new_size=28):
+def process_image(raw_image, output_dir, new_size=28):
     image = format_image(raw_image)
     image = resize_and_center(image, new_size)
-    preform_lrp(image)
+    preform_lrp(image, output_dir)
 
 
 # This function takes in an PIL Image and converts it to a grayscale image to match MNIST format
@@ -65,7 +65,7 @@ def predict_image(image):
 # This function takes in a PIL image, converts it to a tensor and predicts what the image
 # will be, it then passes the model and img_tensor to the LRP function which returns the
 # relevancy of the input at all layers, and presents them.
-def preform_lrp(image):
+def preform_lrp(image, output_dir):
     model = torch.load(os.path.join(MODEL_DIRECTORY, MODEL_FILENAME))
     model.to(device)
     model.eval()
@@ -77,7 +77,7 @@ def preform_lrp(image):
                                ("MaxPool-1", R[2][0]), ("Conv2d-1", R[0][0])])
     predicted_val, percentage = predict_image(image)
     percentagestr = process_percentage(percentage)
-    plot_images(image_tensor, relevance, predicted_val, percentagestr)
+    plot_images(image_tensor, relevance, predicted_val, percentagestr, output_dir)
 
 
 # This function processes the data of the relevancy so its in the correct form
@@ -223,7 +223,7 @@ def show_image(image, figsize=(8, 4), title=None):
 
 # This function is used to display LRP and the input image with the predicted values
 # and the likely-hood the model thinks its correct.
-def plot_images(init_img, R, predicted_val, outstring):
+def plot_images(init_img, R, predicted_val, outstring, output_dir):
     fig = plt.figure(figsize=(10, 10))
     columns = 3
     rows = 2
@@ -243,4 +243,4 @@ def plot_images(init_img, R, predicted_val, outstring):
     plt.tight_layout()
     plt.figtext(0.5, 0.04, "Predicted value of Network is {} \n {}".format(predicted_val, outstring), ha="center", fontsize=18,
                 bbox={"facecolor":"purple", "alpha":0.5, "pad":5})
-    plt.show()
+    fig.savefig(output_dir)
