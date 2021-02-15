@@ -6,6 +6,7 @@ import random
 from src.cnn import CNN
 from PIL import Image
 
+output_path = 'data/Output'
 
 def train_network():
     model = CNN()
@@ -14,18 +15,25 @@ def train_network():
     model.save_model()
 
 
-def test_all_images(path='data\\MyImages'):
-    images = [os.path.join(path, f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
-    for img_dir in images:
+# This function is used to test all the images in a specifc folder. Its by default set to the path of
+# Images I provided for testing.
+def process_images(path='data\\MyImages'):
+    images = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
+    for img in images:
+        img_dir = os.path.join(path, img)
+        out_dir = os.path.join(output_path, img)
         image = Image.open(img_dir)
-        print(loader.process_image(image))
+        loader.process_image(image, out_dir)
+        print("Done image {}".format(img))
 
 
-def process_image():
-    path = 'data\\MyImages'
-    images = [os.path.join(path, f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
-    image = Image.open(random.choice(images))
-    loader.process_image(image)
+# This function is used to test one random image I created.
+def process_image(path='data\\MyImages'):
+    img_choice = random.choice([f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))])
+    img_dir = os.path.join(path, img_choice)
+    out_dir = os.path.join(output_path, img_choice)
+    image = Image.open(img_dir)
+    loader.process_image(image, out_dir)
 
 
 if __name__ == "__main__":
@@ -33,11 +41,12 @@ if __name__ == "__main__":
     parser.add_argument("-tr", "--Train", help="Train the Network", action='store_true')
     parser.add_argument("-te", "--Test", help="Test the Network", action='store_true')
     args = parser.parse_args()
+    if not os.path.exists(output_path):
+        os.mkdir(output_path)
     if not len(sys.argv) > 1:
         print("Please use the flags -tr for training or -te for testing.")
     if args.Train:
         train_network()
     if args.Test:
-        #test_all_images()
-        process_image()
+        process_images()
 
