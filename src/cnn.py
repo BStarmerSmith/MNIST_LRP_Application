@@ -1,4 +1,3 @@
-import torch
 import torch.nn as nn
 from src.variables import *
 from torch.utils.data import DataLoader

@@ -1,6 +1,5 @@
-import torch
-import numpy as np
 from src.utility_funcs import *
+from src.variables import *
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from torch.autograd import Variable
