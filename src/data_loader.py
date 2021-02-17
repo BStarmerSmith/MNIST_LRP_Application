@@ -1,13 +1,14 @@
-import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap
 import torch
 import os
 import numpy as np
+import copy
 from src.variables import *
 from PIL import ImageEnhance, ImageOps, Image
-import copy
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
 from torch.autograd import Variable
 from torchvision import transforms
+import torchsummary
 
 MINST_MEAN, MINST_STANDARD_DIV = 0.1307, 0.3081
 transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((MINST_MEAN,), (MINST_STANDARD_DIV,))])
@@ -244,3 +245,10 @@ def plot_images(init_img, R, predicted_val, outstring, output_dir):
     plt.figtext(0.5, 0.04, "Predicted value of Network is {} \n {}".format(predicted_val, outstring), ha="center", fontsize=18,
                 bbox={"facecolor":"purple", "alpha":0.5, "pad":5})
     fig.savefig(output_dir)
+
+def print_model():
+    model = torch.load(os.path.join(MODEL_DIRECTORY, MODEL_FILENAME))
+    model.eval()
+    model.to(device)
+    print(torchsummary.summary(model, (1, 28, 28)))
+    print(model)
