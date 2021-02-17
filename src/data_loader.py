@@ -1,58 +1,24 @@
 import torch
-import os
 import numpy as np
-import copy
-from src.variables import *
-from PIL import ImageEnhance, ImageOps, Image
+from src.utility_funcs import *
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from torch.autograd import Variable
-from torchvision import transforms
-import torchsummary
-
-MINST_MEAN, MINST_STANDARD_DIV = 0.1307, 0.3081
-transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((MINST_MEAN,), (MINST_STANDARD_DIV,))])
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 # This function takes in an PIL Image and formats it to minsk format, then returns the image
 # which has been processed.
-def process_image(raw_image, output_dir, new_size=28):
+def process_image(raw_image, new_size=28):
     image = format_image(raw_image)
     image = resize_and_center(image, new_size)
-    preform_lrp(image, output_dir)
-
-
-# This function takes in an PIL Image and converts it to a grayscale image to match MNIST format
-# it then enhances the contrast of the image to make feature detection easier.
-def format_image(image):
-    image = image.convert(mode='L')
-    image = ImageEnhance.Contrast(image).enhance(1.5)
     return image
-
-
-# This function simply takes an image and resizes it while making the previous content central.
-# This works by getting the content that's not whitespace and padding around that.
-def resize_and_center(sample, new_size=28):
-    image = ImageOps.invert(sample)
-    bbox = image.getbbox()
-    crop = image.crop(bbox)
-    delta_w = new_size - crop.size[0]
-    delta_h = new_size - crop.size[1]
-    padding = (delta_w//2, delta_h//2, delta_w-(delta_w//2), delta_h-(delta_h//2))
-    return ImageOps.expand(crop, padding)
 
 
 # This function takes in an PIL Image, converts it into a tensor then uses the trained cnn to get
 # predict the digit in the image.
-def predict_image(image):
-    image_tensor = transform(image).float()
-    image_tensor = image_tensor.unsqueeze_(0)
+def predict_image(model, image_tensor):
     cnn_input = Variable(image_tensor)
     cnn_input = cnn_input.to(device)
-    model = torch.load(os.path.join(MODEL_DIRECTORY, MODEL_FILENAME))
-    model.eval()
-    model.to(device)  # Ensures model is on either CPU or GPU
     output = model(cnn_input)
     output = output.to(device)  # Does the same
     _, expectedVal = torch.max(output.data, 1)
@@ -67,38 +33,27 @@ def predict_image(image):
 # will be, it then passes the model and img_tensor to the LRP function which returns the
 # relevancy of the input at all layers, and presents them.
 def preform_lrp(image, output_dir):
-    model = torch.load(os.path.join(MODEL_DIRECTORY, MODEL_FILENAME))
-    model.to(device)
-    model.eval()
-    image_tensor = transform(image).float()
-    image_tensor = image_tensor.unsqueeze_(0)
-    image_tensor.to(device)
+    model, image_tensor = setup_lrp(image)
     R = e_lrp(model, image_tensor)
     relevance = process_array([("Linear Layer-1", R[6][0]), ("MaxPool-2", R[5][0]), ("Conv2d-2", R[3][0]),
                                ("MaxPool-1", R[2][0]), ("Conv2d-1", R[0][0])])
-    predicted_val, percentage = predict_image(image)
+    predicted_val, percentage = predict_image(model, image_tensor)
     percentagestr = process_percentage(percentage)
     plot_images(image_tensor, relevance, predicted_val, percentagestr, output_dir)
 
 
-# This function processes the data of the relevancy so its in the correct form
-# to be presented.
-def process_array(arr):
-    output = []
-    for lable, element in arr:
-        output.append((lable, np.array(element.cpu()).sum(axis=0)))
-    return output
-
-
-# This function takes the 5 most likely outputs and presents them as a string for display.
-def process_percentage(tuple):
-    out_str = ""
-    for index, percentage in tuple:
-        if percentage == 1.0:
-            out_str += "{}: 100% ".format(index)
-        else:
-            out_str += "{}: {:.5%} ".format(index, percentage)
-    return out_str
+# Preforms LRP on an individual image and saves all images individually.
+def preform_lrp_individual(image, output_dir):
+    model, image_tensor = setup_lrp(image)
+    R = e_lrp(model, image_tensor)
+    print(predict_image(model, image_tensor))
+    relevance = process_array([("Linear Layer-1", R[6][0]), ("MaxPool-2", R[5][0]), ("Conv2d-2", R[3][0]),
+                               ("MaxPool-1", R[2][0]), ("Conv2d-1", R[0][0])])
+    file_name = output_dir[:-4]
+    plot_single_image(image_tensor.reshape(28, 28), file_name + "_input.jpg")
+    for tag, r in relevance:
+        f_name = file_name + "_{}.jpg".format(tag)
+        plot_single_image(r, f_name)
 
 
 # This function takes in the model of the Network and an image_tensor. This is what
@@ -162,66 +117,6 @@ def e_lrp(model, img_tensor):
     return R
 
 
-# This function takes a list of Linear layers and converts them to Conv2D layers.
-# The layer at index 0 needs to be specifically formatted to deal with the adjustment
-# of a 2d network to a 1d network.
-def toconv(layers):
-    newlayers = []
-    for i,layer in enumerate(layers):
-        if isinstance(layer, torch.nn.Linear):
-            newlayer = None
-            if i == 0:
-                m,n = 64,layer.weight.shape[0]
-                newlayer = torch.nn.Conv2d(m,n,7)
-                newlayer.weight = torch.nn.Parameter(layer.weight.reshape(n,m,7,7))
-            else:
-                m,n = layer.weight.shape[1],layer.weight.shape[0]
-                newlayer = torch.nn.Conv2d(m,n,1)
-                newlayer.weight = torch.nn.Parameter(layer.weight.reshape(n,m,1,1))
-            newlayer.bias = torch.nn.Parameter(layer.bias)
-            newlayers += [newlayer]
-        else:
-            newlayers += [layer]
-    return newlayers
-
-
-def newlayer(layer, g):
-    layer = copy.deepcopy(layer)
-    try:
-        layer.weight = torch.nn.Parameter(g(layer.weight))
-    except AttributeError:
-        pass
-    try:
-        layer.bias = torch.nn.Parameter(g(layer.bias))
-    except AttributeError:
-        pass
-    return layer
-
-
-def show_tensor(tensor, figsize=(8, 4), title=None):
-    plt.figure(figsize=figsize)
-    plt.matshow(tensor)
-    if title: plt.title(title)
-    plt.show()
-
-
-# This function is used to show an image of whatever tensor is presented.
-def show_image_tensor(tensor, figsize=(8, 4), title=None):
-    tensor = tensor.reshape(28, 28)
-    plt.figure(figsize=figsize)
-    plt.matshow(tensor, cmap='gray')
-    if title: plt.title(title)
-    plt.show()
-
-
-# This function takes in an image, a figure size and a title and presents the image on a chart.
-def show_image(image, figsize=(8, 4), title=None):
-    plt.figure(figsize=figsize)
-    plt.imshow(image, cmap='gray')
-    if title: plt.title(title)
-    plt.show()
-
-
 # This function is used to display LRP and the input image with the predicted values
 # and the likely-hood the model thinks its correct.
 def plot_images(init_img, R, predicted_val, outstring, output_dir):
@@ -246,9 +141,14 @@ def plot_images(init_img, R, predicted_val, outstring, output_dir):
                 bbox={"facecolor":"purple", "alpha":0.5, "pad":5})
     fig.savefig(output_dir)
 
-def print_model():
-    model = torch.load(os.path.join(MODEL_DIRECTORY, MODEL_FILENAME))
-    model.eval()
-    model.to(device)
-    print(torchsummary.summary(model, (1, 28, 28)))
-    print(model)
+
+def plot_single_image(R, output_dir):
+    b = 10 * ((np.abs(R) ** 3.0).mean() ** (1.0/3))
+    my_cmap = plt.cm.seismic(np.arange(plt.cm.seismic.N))
+    my_cmap[:,0:3] *= 0.85
+    my_cmap = ListedColormap(my_cmap)
+    fig = plt.figure(figsize=(10, 10))
+    plt.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    plt.axis('off')
+    plt.imshow(R, cmap=my_cmap, vmin=-b, vmax=b, interpolation='nearest')
+    fig.savefig(output_dir)
