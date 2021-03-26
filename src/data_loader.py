@@ -128,16 +128,8 @@ def e_lrp(model, img_tensor):
         if isinstance(layers[l],torch.nn.MaxPool2d): layers[l] = torch.nn.AvgPool2d(2)
         # We only preform LRP on Conv and AvgPool layers
         if isinstance(layers[l],torch.nn.Conv2d) or isinstance(layers[l],torch.nn.AvgPool2d):
-            if l <= 2:
-                rho = lambda p: p + 0.25*p.clamp(min=0)
-                incr = lambda z: z+1e-9
-            if 3 <= l <= 5:
-                rho = lambda p: p
-                incr = lambda z: z+1e-9+0.25*((z**2).mean()**.5).data
-            if l >= 6:
-                rho = lambda p: p
-                incr = lambda z: z+1e-9
-
+            rho = lambda p: p + 0.25*p.clamp(min=0)
+            incr = lambda z: z+1e-9
             z = incr(newlayer(layers[l],rho).forward(A[l]))  # step 1
             s = (R[l+1].to(device)/z).data                   # step 2
             (z*s).sum().backward(); c = A[l].grad            # step 3
