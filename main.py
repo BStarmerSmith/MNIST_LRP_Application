@@ -4,7 +4,7 @@ import argparse
 import sys
 import random
 from src.cnn import CNN
-from src.utility_funcs import print_model
+from src.utility_funcs import print_model, make_outputfolder
 from src.variables import *
 from PIL import Image
 
@@ -22,10 +22,12 @@ def process_images(path='data\\MyImages'):
     images = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
     for img in images:
         img_dir = os.path.join(path, img)
-        out_dir = os.path.join(OUTPUT_PATH, img)
+        e_out_dir = os.path.join(os.path.join(OUTPUT_PATH, "e"), img)
+        ye_out_dir = os.path.join(os.path.join(OUTPUT_PATH, "ye"), img)
         image = Image.open(img_dir)
         image = loader.process_image(image)
-        loader.preform_lrp(image, out_dir)
+        loader.preform_e_lrp(image, e_out_dir)
+        loader.preform_ye_lrp(image, ye_out_dir)
         print("Done image {}".format(img))
 
 
@@ -47,8 +49,7 @@ if __name__ == "__main__":
     parser.add_argument("-tei", "--TestInd", help="Test the Network with 1 image", action='store_true')
     parser.add_argument("-p", "--Print", help="Print the model", action='store_true')
     args = parser.parse_args()
-    if not os.path.exists(OUTPUT_PATH):
-        os.mkdir(OUTPUT_PATH)
+    make_outputfolder()
     if not len(sys.argv) > 1:
         print("Please use the flags -tr for training, -te for testing, and -p for printing the model.")
     if args.Train:

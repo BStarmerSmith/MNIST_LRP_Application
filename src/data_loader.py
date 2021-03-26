@@ -31,9 +31,20 @@ def predict_image(model, image_tensor):
 # This function takes in a PIL image, converts it to a tensor and predicts what the image
 # will be, it then passes the model and img_tensor to the LRP function which returns the
 # relevancy of the input at all layers, and presents them.
-def preform_lrp(image, output_dir):
+def preform_e_lrp(image, output_dir):
     model, image_tensor = setup_lrp(image)
     R = e_lrp(model, image_tensor)
+    relevance = process_array([("Linear Layer-1", R[6][0]), ("MaxPool-2", R[5][0]), ("Conv2d-2", R[3][0]),
+                               ("MaxPool-1", R[2][0]), ("Conv2d-1", R[0][0])])
+    predicted_val, percentage = predict_image(model, image_tensor)
+    percentagestr = process_percentage(percentage)
+    plot_images(image_tensor, relevance, predicted_val, percentagestr, output_dir)
+
+
+# Same as above but uses Gamma E LRP.
+def preform_ye_lrp(image, output_dir):
+    model, image_tensor = setup_lrp(image)
+    R = ye_lrp(model, image_tensor)
     relevance = process_array([("Linear Layer-1", R[6][0]), ("MaxPool-2", R[5][0]), ("Conv2d-2", R[3][0]),
                                ("MaxPool-1", R[2][0]), ("Conv2d-1", R[0][0])])
     predicted_val, percentage = predict_image(model, image_tensor)
@@ -59,8 +70,8 @@ def preform_lrp_individual(image, output_dir):
 # The LRP algorithm is applied to, it converts all layers to Conv2D then preforms all
 # forward passes so we can get the relevancy of the network at all layers.
 # This function returns the relevance [R] of all layers within the network (except dropout).
+# Inspired from https://git.tu-berlin.de/gmontavon/lrp-tutorial/-/blob/main/utils.py
 def e_lrp(model, img_tensor):
-    # Gets all the layers
     layers = list(model._modules['layer1']) + list(model._modules['layer2']) \
              + toconv([model._modules['fc1'], model._modules['fc2']])
 
@@ -83,8 +94,13 @@ def e_lrp(model, img_tensor):
         if isinstance(layers[l],torch.nn.MaxPool2d): layers[l] = torch.nn.AvgPool2d(2)
         # We only preform LRP on Conv and AvgPool layers
         if isinstance(layers[l],torch.nn.Conv2d) or isinstance(layers[l],torch.nn.AvgPool2d):
-            rho = lambda p: p + 0.25*p.clamp(min=0)
-            incr = lambda z: z+1e-9
+            if l <= 5: # LRP-ε
+                rho = lambda p: p + 0.25*p.clamp(min=0)
+                incr = lambda z: z+1e-9
+            if l >= 6: # LRP-0
+                rho = lambda p: p
+                incr = lambda z: z+1e-9
+
             z = incr(newlayer(layers[l],rho).forward(A[l]))  # step 1
             s = (R[l+1].to(device)/z).data                   # step 2
             (z*s).sum().backward(); c = A[l].grad            # step 3
@@ -93,10 +109,65 @@ def e_lrp(model, img_tensor):
             R[l] = R[l+1]
 
     # Here is where we get the relevancy at layer 0
-    mean, std = 0.1307, 0.3081  # mean and std of MNIST
     A[0] = (A[0].data).requires_grad_(True)
-    lb = (A[0].data*0+(0-mean)/std).requires_grad_(True)
-    hb = (A[0].data*0+(1-mean)/std).requires_grad_(True)
+    lb = (A[0].data*0+(0-MINST_MEAN)/MINST_STANDARD_DIV).requires_grad_(True)
+    hb = (A[0].data*0+(1-MINST_MEAN)/MINST_STANDARD_DIV).requires_grad_(True)
+
+    z = layers[0].forward(A[0].to(device)) + 1e-9                               # step 1 (a)
+    z -= newlayer(layers[0], lambda p: p.clamp(min=0)).forward(lb.to(device))   # step 1 (b)
+    z -= newlayer(layers[0], lambda p: p.clamp(max=0)).forward(hb.to(device))   # step 1 (c)
+    s = (R[1] / z).data                                                         # step 2
+    (z*s).sum().backward()                                                      # step 3
+    c, cp, cm = A[0].grad, lb.grad, hb.grad
+    R[0] = (A[0] * c + lb * cp + hb * cm).data
+    return R
+
+
+# Same as above, but uses multiple rules.
+# Inspired from https://git.tu-berlin.de/gmontavon/lrp-tutorial/-/blob/main/utils.py
+def ye_lrp(model, img_tensor):
+    layers = list(model._modules['layer1']) + list(model._modules['layer2']) \
+             + toconv([model._modules['fc1'], model._modules['fc2']])
+
+    L = len(layers)
+    A = [img_tensor]+[None]*L
+    for l in range(L): # Preforms the forward pass for each layer
+        A[l+1] = layers[l].forward(A[l].to(device))
+
+    # Used to get the predicted output of the network
+    T = A[-1].cpu().detach().numpy().tolist()[0]
+    index = T.index(max(T))
+    T = np.abs(np.array(T)) * 0
+    T[index] = 1
+    T = torch.FloatTensor(T)
+
+    R = [None] * L + [(A[-1].cpu() * T).data + 1e-6]
+    for l in range(1,L)[::-1]:
+        A[l] = (A[l].data).requires_grad_(True)
+        # LRP paper says to turn MaxPool layers to AvgPoollayers
+        if isinstance(layers[l],torch.nn.MaxPool2d): layers[l] = torch.nn.AvgPool2d(2)
+        # We only preform LRP on Conv and AvgPool layers
+        if isinstance(layers[l],torch.nn.Conv2d) or isinstance(layers[l],torch.nn.AvgPool2d):
+            if l <= 2:  # LRP-ε
+                rho = lambda p: p + 0.25*p.clamp(min=0)
+                incr = lambda z: z+1e-9
+            if 3 <= l <= 5:  # LRP-γ
+                rho = lambda p: p
+                incr = lambda z: z+1e-9+0.25*((z**2).mean()**.5).data
+            if l >= 6:  # LRP-0
+                rho = lambda p: p
+                incr = lambda z: z+1e-9
+
+            z = incr(newlayer(layers[l], rho).forward(A[l]))  # step 1
+            s = (R[l+1].to(device)/z).data                    # step 2
+            (z*s).sum().backward(); c = A[l].grad             # step 3
+            R[l] = (A[l]*c).data                              # step 4
+        else:
+            R[l] = R[l+1]
+    # Here is where we get the relevancy at layer 0
+    A[0] = (A[0].data).requires_grad_(True)
+    lb = (A[0].data*0+(0-MINST_MEAN)/MINST_STANDARD_DIV).requires_grad_(True)
+    hb = (A[0].data*0+(1-MINST_MEAN)/MINST_STANDARD_DIV).requires_grad_(True)
 
     z = layers[0].forward(A[0].to(device)) + 1e-9                               # step 1 (a)
     z -= newlayer(layers[0], lambda p: p.clamp(min=0)).forward(lb.to(device))   # step 1 (b)

@@ -42,6 +42,7 @@ def setup_lrp(image):
 # This function takes a list of Linear layers and converts them to Conv2D layers.
 # The layer at index 0 needs to be specifically formatted to deal with the adjustment
 # of a 2d network to a 1d network.
+# From https://git.tu-berlin.de/gmontavon/lrp-tutorial/-/blob/main/utils.py
 def toconv(layers):
     newlayers = []
     for i,layer in enumerate(layers):
@@ -61,7 +62,7 @@ def toconv(layers):
             newlayers += [layer]
     return newlayers
 
-
+# From https://git.tu-berlin.de/gmontavon/lrp-tutorial/-/blob/main/utils.py
 def newlayer(layer, g):
     layer = copy.deepcopy(layer)
     try:
@@ -73,6 +74,17 @@ def newlayer(layer, g):
     except AttributeError:
         pass
     return layer
+
+
+def make_outputfolder():
+    if not os.path.exists(OUTPUT_PATH):
+        os.mkdir(OUTPUT_PATH)
+    e_path = os.path.join(OUTPUT_PATH, "e")
+    ye_path = os.path.join(OUTPUT_PATH, "ye")
+    if not os.path.exists(e_path):
+        os.mkdir(e_path)
+    if not os.path.exists(ye_path):
+        os.mkdir(ye_path)
 
 
 def show_tensor(tensor, figsize=(8, 4), title=None):
