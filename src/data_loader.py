@@ -95,8 +95,8 @@ def e_lrp(model, img_tensor):
         # We only preform LRP on Conv and AvgPool layers
         if isinstance(layers[l],torch.nn.Conv2d) or isinstance(layers[l],torch.nn.AvgPool2d):
             if l <= 5: # LRP-ε
-                rho = lambda p: p + 0.25*p.clamp(min=0)
-                incr = lambda z: z+1e-9
+                rho = lambda p: p
+                incr = lambda z: z+1e-9+0.25*((z**2).mean()**.5).data
             if l >= 6: # LRP-0
                 rho = lambda p: p
                 incr = lambda z: z+1e-9
@@ -148,10 +148,10 @@ def ye_lrp(model, img_tensor):
         if isinstance(layers[l],torch.nn.MaxPool2d): layers[l] = torch.nn.AvgPool2d(2)
         # We only preform LRP on Conv and AvgPool layers
         if isinstance(layers[l],torch.nn.Conv2d) or isinstance(layers[l],torch.nn.AvgPool2d):
-            if l <= 2:  # LRP-ε
+            if l <= 2:  # LRP-γ
                 rho = lambda p: p + 0.25*p.clamp(min=0)
                 incr = lambda z: z+1e-9
-            if 3 <= l <= 5:  # LRP-γ
+            if 3 <= l <= 5:  # LRP-ε
                 rho = lambda p: p
                 incr = lambda z: z+1e-9+0.25*((z**2).mean()**.5).data
             if l >= 6:  # LRP-0
@@ -165,6 +165,7 @@ def ye_lrp(model, img_tensor):
         else:
             R[l] = R[l+1]
     # Here is where we get the relevancy at layer 0
+    # Rule LRP-zB
     A[0] = (A[0].data).requires_grad_(True)
     lb = (A[0].data*0+(0-MINST_MEAN)/MINST_STANDARD_DIV).requires_grad_(True)
     hb = (A[0].data*0+(1-MINST_MEAN)/MINST_STANDARD_DIV).requires_grad_(True)
